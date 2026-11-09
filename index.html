@@ -1,0 +1,2897 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mi Quiz Interactivo</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; touch-action: manipulation; }
+        .quiz-container { background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 800px; width: 95%; position: relative; box-sizing: border-box; }
+        .header-row { display: flex; justify-content: space-between; align-items: start; border-bottom: 2px solid #007bff; padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
+        h1 { color: #333; font-size: 1.4rem; margin: 0; }
+        .shuffle-btn { background-color: #6c757d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: 0.2s; }
+        .shuffle-btn:hover { background-color: #5a6268; }
+        .score-board { font-size: 0.9rem; color: #555; margin-top: 5px; }
+        .question { font-size: 1.2rem; margin-bottom: 1.2rem; font-weight: 600; color: #2c3e50; line-height: 1.4; }
+        .question-img-container { text-align: center; margin-top: 15px; margin-bottom: 15px; }
+        .question-img { max-width: 100%; max-height: 350px; border-radius: 8px; object-fit: contain; }
+        
+        /* Opciones Clásicas */
+        .options { display: flex; flex-direction: column; gap: 10px; }
+        .option-btn { padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; cursor: pointer; text-align: left; transition: all 0.2s; font-size: 1rem; position: relative; }
+        .option-btn:hover:not(:disabled) { background-color: #f0f8ff; border-color: #007bff; }
+        .option-btn.correct { background-color: #d4edda; border-color: #28a745; color: #155724; }
+        .option-btn.wrong { background-color: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .option-btn.should-have-been { border: 2px dashed #28a745; background-color: #e9f7ef; }
+        .option-btn:disabled { cursor: default; opacity: 1; } 
+        
+        .option-content { display: flex; align-items: center; gap: 15px; }
+        .option-img { max-width: 150px; max-height: 150px; border-radius: 5px; object-fit: contain; }
+        .option-text { flex-grow: 1; }
+
+        /* Arrastrar y Soltar (DND) Estilos */
+        .dnd-board { display: flex; flex-direction: column; align-items: center; width: 100%; user-select: none; }
+        .dnd-img-wrapper { position: relative; display: inline-block; max-width: 100%; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; }
+        .dnd-img-wrapper img { display: block; max-width: 100%; height: auto; pointer-events: none; }
+        .dnd-zone { position: absolute; background: rgba(255, 255, 255, 0.7); border: 2px dashed #333; border-radius: 5px; transform: translate(-50%, -50%); min-width: 100px; min-height: 35px; display: flex; justify-content: center; align-items: center; }
+        .dnd-zone.filled { border: 2px solid #28a745; background: rgba(212, 237, 218, 0.9); }
+        .dnd-bank { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 20px; width: 100%; padding: 15px; background: #e9ecef; border-radius: 8px; min-height: 60px; box-sizing: border-box;}
+        .dnd-label { padding: 8px 12px; background: #007bff; color: white; border-radius: 5px; cursor: grab; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); touch-action: none; text-align: center; }
+        .dnd-label:active { cursor: grabbing; }
+        .dnd-label.placed { cursor: default; background: #28a745; box-shadow: none; width: 100%; height: 100%; border-radius: 3px; display:flex; align-items:center; justify-content:center; margin:0;}
+
+        /* Feedback y Controles */
+        .feedback { margin-top: 20px; padding: 15px; border-radius: 8px; display: none; font-size: 1rem; line-height: 1.5; }
+        .feedback.show { display: block; animation: fadeIn 0.3s; }
+        .feedback-correct { background-color: #e9f7ef; border-left: 5px solid #28a745; }
+        .feedback-wrong { background-color: #fce8e6; border-left: 5px solid #dc3545; }
+        .feedback-info { background-color: #e2e6ea; border-left: 5px solid #6c757d; }
+        .controls { margin-top: 30px; display: flex; justify-content: space-between; gap: 10px; padding-top: 15px; border-top: 1px solid #eee; }
+        .nav-btn { padding: 10px 25px; border-radius: 5px; cursor: pointer; font-size: 1rem; border: none; font-weight: bold; transition: 0.2s; }
+        #prev-btn { background-color: #e2e6ea; color: #333; }
+        #prev-btn:hover:not(:disabled) { background-color: #dbe0e5; }
+        #prev-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #next-btn { background-color: #007bff; color: white; } 
+        #next-btn:hover { background-color: #0056b3; }
+        #next-btn.back-to-results { background-color: #6c757d; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="quiz-container" id="quiz-ui">
+    <div class="header-row">
+        <div>
+            <h1 id="quiz-title-display">Mi Quiz Interactivo</h1>
+            <div class="score-board">
+                Pregunta <span id="current-q">1</span> de <span id="total-q">0</span> 
+                | Puntos: <span id="score-val" style="font-weight: bold; color: #007bff;">0</span>
+            </div>
+        </div>
+        <button class="shuffle-btn" onclick="restartQuizManual(false)">🔄 Reiniciar</button>
+    </div>
+    
+    <div id="question-area">
+        <div class="question" id="question-text">Cargando...</div>
+        <div class="options" id="options-container"></div>
+        <div id="dnd-container" style="display:none;"></div>
+        
+        <div class="feedback" id="feedback-text"></div>
+    </div>
+
+    <div class="controls">
+        <button id="prev-btn" class="nav-btn" onclick="prevQuestion()">Anterior</button>
+        <div style="flex-grow: 1;"></div> 
+        <button id="next-btn" class="nav-btn" onclick="nextQuestion()">Siguiente</button>
+    </div>
+</div>
+
+<div class="quiz-container" id="results-ui" style="display: none; text-align: center;">
+    <h1 style="font-size: 2rem; color: #007bff; margin-bottom: 20px;">Quiz Finalizado</h1>
+    <div id="final-score-display" style="font-size: 1.5rem; margin: 20px 0;"></div>
+    <p id="final-msg-display" style="color: #666; font-size: 1.1rem;"></p>
+    
+    <div style="margin-top: 30px; display: flex; gap: 10px; justify-content: center;">
+        <button class="nav-btn" style="background-color: #28a745; color: white;" onclick="enterReviewMode()">🔍 Revisar</button>
+        <button class="nav-btn" style="background-color: #007bff; color: white;" onclick="restartQuizManual(true)">🔄 Jugar de Nuevo</button>
+    </div>
+</div>
+
+<script>
+    const quizData = {
+    "questions": [
+        {
+            "type": "choice",
+            "question": "¿Qué significa realmente digitalizar una empresa?",
+            "showConfetti": true,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Incorporar ordenadores y comprar software moderno para todos los departamentos.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Utilizar tecnologías digitales para transformar sus procesos y aprovechar mejor la información.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Sustituir únicamente los documentos en papel por archivos de texto en el ordenador.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Una empresa que utiliza ordenadores, correo electrónico y programas de gestión, ¿está necesariamente digitalizada?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Sí, porque ya utiliza herramientas informáticas en su día a día.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "No, porque aun utilizando esas herramientas puede mantener procesos muy manuales.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Sí, siempre que todos los empleados tengan acceso a internet.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿En qué consiste \"informatizar\" una tarea?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "En analizar el proceso completo de la empresa y modificar cómo se toman las decisiones.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "En pasar una tarea manual a una herramienta informática, como sustituir un papel por un formulario en el ordenador.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "En conectar todos los sensores de una fábrica directamente con el departamento de contabilidad.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cuál es la relación entre informatización y digitalización?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Son exactamente lo mismo y tienen el mismo alcance.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Informatizar tiene un alcance mayor que digitalizar.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Informatizar una tarea puede formar parte de una digitalización, pero no toda informatización transforma el proceso completo.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cómo afecta la implantación de tecnología digital a la organización del trabajo?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Solo afecta a los equipos informáticos y programas utilizados, sin alterar las tareas de los empleados.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Puede cambiar los procesos, las responsabilidades, quién registra o consulta la información y cómo se coordinan los departamentos.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Obliga a que una única persona tenga que volver a introducir todos los datos que generan los técnicos.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Si un técnico registra una intervención directamente en una aplicación conectada, ¿qué ocurre con esa información?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Queda disponible para administración, planificación o mantenimiento sin que otra persona tenga que volver a introducirla.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Debe imprimirse en papel obligatoriamente para que el departamento de administración pueda archivarla.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Solo puede ser consultada por el propio técnico en su dispositivo móvil.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Qué significan las siglas IT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Tecnología Industrial (Industrial Technology).",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Tecnología de la Información (Information Technology).",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Innovación Tecnológica (Technological Innovation).",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cuál es la función principal del entorno IT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Medir, supervisar o actuar directamente sobre procesos y equipos físicos.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Gestionar información mediante ordenadores, servidores, aplicaciones, bases de datos o correo electrónico.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Regular la velocidad de los motores y controlar la temperatura de las instalaciones industriales.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cuáles de las siguientes áreas empresariales constituyen ejemplos claros de entornos IT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Administración y facturación, recursos humanos, compras, ventas y atención al cliente.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "El cuadro eléctrico de una máquina, los sensores de presión y los variadores de frecuencia.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Exclusivamente el departamento de soporte técnico e informática.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Qué significan las siglas OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Organización del Trabajo (Organizational Task).",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Tecnología de Oficina (Office Technology).",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Tecnología de Operaciones (Operational Technology).",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Con qué está relacionado directamente el entorno OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Con sistemas que miden, supervisan o actúan directamente sobre procesos y equipos físicos.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Con la elaboración de nóminas, facturas y campañas de marketing comercial.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Con el almacenamiento de documentos administrativos en carpetas compartidas.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cuáles de los siguientes elementos pertenecen al entorno OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Bases de datos de clientes, sistemas ERP, aplicaciones de órdenes de trabajo y correo electrónico.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Sensores, PLC, controladores, actuadores, variadores y sistemas de regulación y supervisión.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Hojas de cálculo, procesadores de texto y herramientas de gestión documental.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En una instalación física, ¿qué función cumple un actuador dentro de un entorno OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Medir una magnitud física como la temperatura o la presión.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Recibir la señal del sensor y almacenarla en una base de datos de clientes.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Modificar el funcionamiento de un equipo físico a partir de las órdenes recibidas.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Qué tienen en común los entornos IT y OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Ambos utilizan tecnología digital, intercambian información y pueden estar conectados mediante redes y sistemas de comunicación.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Ambos tienen como única finalidad actuar físicamente sobre las máquinas de producción.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Ninguno de los dos necesita redes de comunicación para funcionar de forma integrada.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Por qué una base de datos de mantenimiento pertenece a IT y un sensor de temperatura pertenece a OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Porque la base de datos es más moderna y el sensor es una tecnología antigua.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Porque la base de datos almacena y organiza información (IT), mientras que el sensor mide una magnitud física de la instalación (OT).",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Porque la base de datos está en la planta de producción y el sensor está en las oficinas.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Qué tipo de tecnologías se utilizan principalmente \"en planta\"?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Sistemas CRM, contabilidad y herramientas de recursos humanos.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Sensores, dispositivos IoT, PLC, sistemas de supervisión, adquisición de datos y comunicaciones industriales.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Gestores de correo electrónico y bases de datos de facturación.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Para qué sirve un sistema ERP dentro de las tecnologías de negocio?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Para controlar el \"back office\" o trastienda (inventario, compras, producción, recursos humanos, contabilidad).",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Para controlar el \"front office\" o interacción comercial (campañas de marketing, ventas, atención al cliente).",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Para medir físicamente las revoluciones por minuto de un motor industrial en la fábrica.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Para qué sirve un sistema CRM dentro de las tecnologías de negocio?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Para programar la lógica de control de los autómatas programables (PLC) de la planta.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Para controlar el \"back office\" (contabilidad interna y nóminas de empleados).",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Para controlar el \"front office\" o interacción comercial (campañas de marketing, ventas, atención al cliente).",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Qué criterio debe seguir una empresa para seleccionar una tecnología de digitalización?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Elegir siempre la tecnología más moderna y avanzada que exista en el mercado.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Identificar primero el problema que existe, qué información se necesita y qué mejora se espera conseguir.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Comprar primero la tecnología y después buscar para qué problema puede servir.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cuál es el orden lógico del recorrido de un dato cuando se conectan los entornos IT y OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Sensor → Controlador/adquisición → Comunicaciones → Plataforma → Almacenamiento → Aplicación → Responsable.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Responsable → Aplicación → Sensor → Base de datos → Controlador → Comunicaciones.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Comunicaciones → Sensor → Almacenamiento → Controlador → Plataforma → Aplicación.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cuándo se considera que un proceso está digitalizado \"de extremo a extremo\"?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Cuando todos los trabajadores tienen un ordenador portátil en su puesto de trabajo.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Cuando la información acompaña al proceso completo, desde que se genera el dato hasta que se usa para actuar o decidir, con poca o ninguna reintroducción manual.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Cuando el proceso empieza en papel, se escanea a mitad del proceso y se vuelve a imprimir al final.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Qué cambios concretos deberían observarse al comparar el \"antes y después\" de digitalizar un proceso?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Más registros en papel, necesidad de introducir los datos varias veces y mayor aislamiento entre departamentos.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Menos registros repetidos, menos papel, acceso más rápido a la información, historiales actualizados y avisos automáticos.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Que el trabajo de oficina desaparece por completo y ya no hace falta tomar decisiones.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Qué ventaja tiene el principio de \"registrar una vez y reutilizar\"?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Reduce las duplicidades, disminuye los errores por introducir valores diferentes y mantiene una información más coherente y trazable.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Hace que varios departamentos tengan que escribir el mismo dato manualmente para entrenar la memoria.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Impide que otros departamentos distintos al que creó el dato puedan consultarlo.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cuál de las siguientes NO es una ventaja de disponer de información conectada en la empresa?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Mejorar la trazabilidad, detectar incidencias antes y facilitar la planificación.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Tomar decisiones basadas en datos y elaborar informes con mayor facilidad.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Aumentar el tiempo dedicado a copiar datos de una hoja de papel al ordenador.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En el ejercicio práctico de LibreOffice Calc, ¿qué tres nombres exactos deben tener las hojas del libro?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Hoja1, Hoja2 y Hoja3.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Proceso_actual, IT_OT y Proceso_digital.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Inicio, Nudo y Conclusión.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cómo se puede cambiar el nombre de una hoja en LibreOffice Calc?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Haciendo doble clic sobre la pestaña de la hoja o usando el botón derecho del ratón sobre ella.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Únicamente cerrando el archivo y cambiándole el nombre desde el explorador de archivos del sistema.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Pulsando el botón \"+\" situado junto a las pestañas inferiores.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿En qué formato de archivo nativo de LibreOffice Calc se pide guardar el ejercicio?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Formato Excel (.xlsx).",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Formato de documento de texto (.odt).",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Hoja de cálculo ODF (.ods).",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En la hoja «Proceso_actual», ¿cuál es el orden correcto para plantear la solución en las últimas tres columnas (D, E y F)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Primero se elige la Tecnología (D), luego la Mejora (E) y por último el Problema (F).",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Primero se identifica el Problema detectado (D), después se plantea la Mejora digital propuesta (E) y finalmente la Tecnología (F).",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Solo se escribe la tecnología, sin necesidad de indicar qué problema resuelve.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En el caso de CLIMASUR, durante la fase de \"Intervención\", el técnico toma datos en papel y no están disponibles inmediatamente en la oficina. ¿Qué tecnología se propone para solucionarlo?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Dispositivo móvil + IoT.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Llamar por teléfono al encargado para dictarle todas las temperaturas.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Guardar el papel en una carpeta archivadora al final del mes.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En LibreOffice Calc, ¿qué ruta de menú se sigue para que los textos largos ocupen varias líneas dentro de una misma celda?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Archivo > Guardar como > Texto largo.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Formato > Celdas > Alineación y activar la opción de ajuste automático del texto.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Formato > Celdas > Tipo de letra > Negrita.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cómo se ajusta rápidamente el ancho de una columna en Calc para que toda la información sea legible?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Haciendo doble clic sobre el límite derecho del encabezado de la columna (por ejemplo, entre A y B) cuando aparece la flecha de ajuste.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Borrando parte del texto hasta que quepa en el tamaño original de la celda.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Haciendo doble clic sobre la pestaña del nombre de la hoja en la parte inferior.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Según la tabla «IT_OT» del caso práctico, ¿cómo se clasifica un \"PLC\" y cuál es su justificación?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Se clasifica como IT, porque gestiona el correo electrónico de la empresa.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Se clasifica como OT, porque actúa sobre el proceso físico mediante lógica de control.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Se clasifica como IT, porque almacena datos de clientes e instalaciones.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Según la tabla «IT_OT», ¿a qué entorno pertenece un \"Variador de velocidad\" y cuál es su función?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Pertenece a OT y su función es regular la velocidad de un motor (interviene directamente sobre un equipo físico).",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Pertenece a IT y su función es acelerar la velocidad de conexión a internet en la oficina.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Pertenece a OT y su función es conservar y comunicar los resultados de una intervención en PDF.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cómo se clasifican en la tabla «IT_OT» una \"Aplicación de mantenimiento\" y un \"Informe digital\"?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Ambos se clasifican como OT, porque los utilizan los técnicos de mantenimiento.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "La aplicación es OT y el informe digital es IT.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Ambos se clasifican como IT, porque su finalidad principal es gestionar, conservar y comunicar información.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Y cómo se clasifica el \"Dispositivo móvil del técnico\" o el \"Correo electrónico\"?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Como elementos del entorno IT, ya que son herramientas para gestionar, registrar o intercambiar información.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Como elementos del entorno OT, porque el técnico los lleva encima cuando va a la instalación física.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Ninguno de los dos forma parte de la digitalización de una empresa.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En el flujo digital IT-OT de 7 etapas de la hoja «Proceso_digital», ¿qué elemento ocupa la etapa 4 (justo entre las Comunicaciones y la Base de datos)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "El Sensor, que genera el dato de temperatura.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "La Plataforma, que recibe y organiza la información.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "El Técnico o responsable, que toma las decisiones.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En ese mismo flujo digital IT-OT, ¿qué función cumple la etapa 5 (Base de datos / Almacenamiento)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Guarda el historial.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Recibe la señal física y controla el proceso eléctrico.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Transmite los datos por la red inalámbrica.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En LibreOffice Calc, si quieres seleccionar dos celdas que NO están juntas (por ejemplo, D1 y F1) para ponerlas en negrita a la vez, ¿qué tecla debes mantener pulsada mientras haces clic?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "La tecla Enter.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "La tecla Ctrl (Control).",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "La tecla Espacio.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En la comparación «ANTES» y «DESPUÉS» de digitalizar el proceso en CLIMASUR, ¿qué cambia en el paso de las órdenes y el historial?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Antes el técnico consultaba el historial digital y después usa hojas de papel.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Antes el encargado anotaba en papel y el informe se archivaba en carpetas; después hay orden de trabajo digital, el técnico consulta el historial y este se actualiza automáticamente.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "No cambia nada en el proceso, salvo que los informes en papel ahora se escriben con letra en negrita.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "¿Cuál es una de las conclusiones principales tras digitalizar de extremo a extremo el caso de mantenimiento?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Que la orden de trabajo llega al técnico sin volver a copiar los datos y el informe se genera a partir de datos ya registrados.",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Que los datos de cada intervención se borran al terminar el día para no ocupar espacio en el servidor.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Que el cliente tiene que seguir llamando por teléfono para dictar las lecturas de temperatura de su máquina.",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que significa digitalizar una empresa?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Utilizar tecnologias digitales para transformar sus procesos y aprovechar mejor la informacion",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Incorporar ordenadores y comprar software sin cambiar los procesos",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Sustituir unicamente el papel por formularios en un ordenador",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Cual es la diferencia principal entre informatizar y digitalizar?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Son exactamente lo mismo",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Informatizar es pasar una tarea manual a una herramienta informatica y digitalizar transforma el proceso completo",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Digitalizar solo afecta a los equipos fisicos e informatizar afecta a toda la organizacion",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que significa la sigla IT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Tecnologia de Operaciones",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Tecnologia de la Informacion",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Innovacion Tecnologica",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que agrupa principalmente el entorno IT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Tecnologias y sistemas destinados a gestionar informacion como servidores, bases de datos y aplicaciones",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Sensores, actuadores y sistemas que actuan sobre procesos fisicos",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Exclusivamente la maquinaria pesada de una planta industrial",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Cual de las siguientes areas pertenece habitualmente al entorno IT de una empresa?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "El cuadro de regulacion de motores",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Administracion, facturacion y recursos humanos",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "El sistema de sensores de presion de una caldera",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que significa la sigla OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Tecnologia de Operaciones",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Organizacion del Trabajo",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Operaciones Telematicas",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Con que esta relacionado el entorno OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Con el envio de correos electronicos y gestion documental",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Con sistemas que miden, supervisan o actuan directamente sobre procesos y equipos fisicos",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Con la contabilidad y la atencion comercial al cliente",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Cual de los siguientes elementos es un ejemplo de entorno OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Una base de datos de clientes",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Un programa de facturacion",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Un sensor, un PLC o un actuador",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Cual es la diferencia principal entre los entornos IT y OT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "IT usa tecnologia digital y OT solo usa tecnologia mecanica",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Su finalidad: IT gestiona informacion y OT mide, supervisa o actua sobre procesos fisicos",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "No existe ninguna diferencia, ambos cumplen la misma funcion",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "A que entorno pertenece una base de datos de mantenimiento y por que?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Pertenece a IT porque almacena y organiza informacion",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Pertenece a OT porque esta en la fabrica",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Pertenece a OT porque mide la temperatura de las maquinas",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Para que sirven los sistemas ERP en el negocio?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Para medir la velocidad de un motor en planta",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Para controlar el back office como inventario, compras, produccion, recursos humanos y contabilidad",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Exclusivamente para disenar piezas en 3D",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Para que sirven los sistemas CRM en el negocio?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Para controlar el front office o interaccion comercial como marketing, ventas y atencion al cliente",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Para programar los PLC de las maquinas",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Para regular la temperatura de una instalacion termica",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Como se debe seleccionar una tecnologia en la empresa?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Eligiendo siempre la mas moderna y cara del mercado",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Identificando primero el problema que existe, que informacion se necesita y que mejora se espera conseguir",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Implantando la tecnologia al azar antes de analizar el proceso",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Cual es el recorrido logico de un dato en la conexion entre OT e IT?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Aplicacion, sensor, base de datos, controlador y comunicaciones",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Sensor, controlador o adquisicion, comunicaciones, plataforma, almacenamiento, aplicacion y responsable",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Responsable, sensor, almacenamiento y controlador",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Cuando se considera que un proceso esta digitalizado de extremo a extremo?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Cuando la informacion acompana al proceso completo desde que se genera hasta que se usa para decidir, con poca o ninguna reintroduccion manual",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Cuando todos los trabajadores tienen un ordenador en su mesa aunque sigan pasando datos en papel",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Cuando se escanean los documentos al final del ano para guardarlos en una carpeta",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que ventaja aporta registrar un dato una sola vez y reutilizarlo?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Aumenta el trabajo administrativo de los departamentos",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Se reducen las duplicidades y los errores, manteniendo una informacion mas coherente y trazable",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Obliga a que cada departamento vuelva a escribir el dato en su propio programa",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Cual es el formato nativo de archivo de hoja de calculo en LibreOffice Calc utilizado en las practicas?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": ".xlsx",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": ".pdf",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": ".ods",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En LibreOffice Calc, para que sirve activar la opcion Ajustar texto automaticamente en Alineacion?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Permite que los textos largos ocupen varias lineas dentro de la misma celda",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Traduce el texto automaticamente a otro idioma",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Cambia el tipo de letra a negrita en toda la hoja",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En la clasificacion IT/OT, como se clasifica un variador de velocidad y por que?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "IT, porque envia correos electronicos",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "OT, porque regula la velocidad de un motor e interviene directamente sobre un equipo fisico",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "IT, porque almacena el historial de clientes",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En la clasificacion IT/OT, como se clasifica un informe digital de mantenimiento?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "IT, porque su finalidad principal es conservar, comunicar y gestionar informacion",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "OT, porque actua fisicamente sobre la caldera",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "OT, porque mide el caudal de agua",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que son las tecnologias habilitadoras digitales (THD)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Programas basicos de ofimatica que no cambian los procesos",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Tecnologias que permiten desarrollar nuevas capacidades digitales, transformar procesos, crear productos o servicios y usar mejor la informacion",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Herramientas manuales utilizadas en el mantenimiento tradicional",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En que consiste el Internet de las cosas (IoT)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "En conectar objetos o equipos que incorporan sensores, actuadores y capacidad de comunicacion",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "En crear entornos simulados con gafas virtuales para jugar",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "En fabricar piezas anadiendo plastico capa por capa",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que es una tecnologia de registro distribuido (DLT)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Un programa centralizado en un unico ordenador sin conexion a red",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Una base de datos digital compartida, descentralizada y sincronizada entre multiples ordenadores sin necesidad de una autoridad central",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Un robot industrial que trabaja aislado en una jaula",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Cual es el tipo de tecnologia DLT mas conocido y como organiza los datos?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "La blockchain o cadena de bloques, que organiza los datos en bloques protegidos mediante criptografia",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "El Big Data, que guarda los datos en hojas de papel",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "El gemelo digital, que dibuja planos en 2D",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Para que puede ser util la tecnologia blockchain entre empresas?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Para sustituir cualquier base de datos sencilla de una oficina",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Para casos de trazabilidad donde se necesita seguir el rastro de un producto a lo largo de la cadena de suministro y verificar registros compartidos",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Para corregir por si sola los datos falsos o de mala calidad que se introducen al principio",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que caracteriza a la robotica colaborativa?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Elimina por completo la necesidad de evaluar riesgos y proteger a las personas",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Utiliza robots disenados para realizar tareas en espacios de trabajo compartidos con personas aplicando medidas de seguridad",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Consiste en programas informaticos que envian facturas automaticamente",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En que consiste la fabricacion aditiva o impresion 3D?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "En fabricar una pieza anadiendo material por capas a partir de un modelo digital",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "En cortar bloques de metal mediante chorro de agua",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "En fabricar grandes series de millones de piezas identicas a bajo coste sin importar el material",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Cual es la diferencia entre realidad aumentada y realidad virtual?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "No hay diferencia, ambas bloquean la vision del mundo real",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "La realidad aumentada incorpora informacion digital sobre la vision del entorno real y la realidad virtual crea un entorno completamente simulado",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "La realidad virtual muestra instrucciones sobre una maquina real y la aumentada sirve solo para videojuegos",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que es un gemelo digital?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Un simple dibujo en 3D estatico sin conexion a datos",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Una representacion digital de un equipo, producto o proceso que se relaciona con datos del elemento real para observar su estado y simular cambios",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Una copia de seguridad de los archivos del ordenador en un disco duro externo",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que ofrecen los servicios en la nube (Cloud)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Acceso a aplicaciones, capacidad de calculo o almacenamiento a traves de una red",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Sensores fisicos para soldar tuberias en una instalacion",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Impresoras 3D para fabricar repuestos en el taller",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que permiten hacer la inteligencia artificial (IA) y el Big Data?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "La IA mide la presion del agua y el Big Data regula las valvulas fisicamente",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "La IA reconoce patrones, clasifica informacion o genera predicciones, y el Big Data analiza grandes volumenes de datos para encontrar tendencias",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Funcionan perfectamente aunque los datos sean falsos y sin necesidad de validar los resultados",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "De que dependen el exito de la inteligencia artificial y el analisis de datos?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "De la calidad de los datos, de la validacion de los resultados y de una aplicacion adecuada",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Unicamente de la velocidad de la conexion a internet",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "De no revisar nunca las predicciones que genera el sistema",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que relacion tienen las THD con la eficiencia y la sostenibilidad?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Toda tecnologia digital es 100% sostenible y no consume recursos ni energia",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Pueden ayudar a reducir desplazamientos, consumos o desperdicios, pero tambien consumen recursos y energia, por lo que hay que comparar beneficios e impactos",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Las THD siempre empeoran el consumo energetico y nunca ayudan al mantenimiento",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que elementos minimos debe recoger un informe util sobre tecnologias habilitadoras digitales?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Su caracteristica principal, el area de aplicacion, ejemplo de uso en planta y/o negocio, producto o servicio que genera y mejoras esperadas",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Unicamente una lista con los nombres de las tecnologias mas famosas",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Solo el precio de compra del software sin explicar para que se va a usar",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Con que simbolo debe comenzar siempre una formula en LibreOffice Calc?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Con el simbolo +",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Con el simbolo =",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Con el simbolo #",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En LibreOffice Calc, que hace la funcion =SUMA(G2:H2)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Suma los valores contenidos en el rango desde G2 hasta H2",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Resta el valor de H2 al valor de G2",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Calcula la media aritmetica entre G2 y H2",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que ocurre en LibreOffice Calc al copiar una formula hacia abajo arrastrando el pequeno cuadrado de la esquina inferior derecha de la celda?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Se borra el contenido de todas las celdas inferiores",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Calc copia la formula y adapta automaticamente las referencias relativas de fila (por ejemplo, de fila 2 pasa a fila 3, 4, etc.)",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Se copia el mismo numero fijo sin recalcular nada para las nuevas filas",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Cual es la estructura correcta de la funcion SI en LibreOffice Calc?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "=SI(valor_si_falso; prueba_logica; valor_si_verdadero)",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "=SI(prueba_logica; valor_si_verdadero; valor_si_falso)",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "=SI(rango; criterio)",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En la formula =SI(I2>=8; \"Alta\"; SI(I2>=6; \"Media\"; \"Baja\")), que resultado devolvera si la celda I2 tiene un valor de 7?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Alta",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Media",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Baja",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Para que sirve la funcion CONTARA en LibreOffice Calc?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Cuenta el numero de celdas no vacias dentro de un rango",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Cuenta unicamente las celdas que contienen numeros mayores que diez",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Suma todos los valores numericos de una columna",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Para que sirve la funcion PROMEDIO en LibreOffice Calc?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Muestra el valor mas alto de un conjunto de datos",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Calcula la media aritmetica de un conjunto de valores",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Cuenta cuantas celdas tienen texto",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Para que sirve la funcion CONTAR.SI en LibreOffice Calc?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Cuenta el numero de celdas dentro de un rango que cumplen con un criterio o condicion especifica",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Suma los valores si son positivos",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Elimina las filas que no cumplen una condicion",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En la formula =CONTAR.SI(E2:E9; \"Si\"), por que la palabra Si va entre comillas?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Porque es un error tipografico de la formula",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Porque en CONTAR.SI, si el criterio incluye texto o simbolos logicos de comparacion, debe ir entre comillas",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Porque indica que la celda debe ponerse en negrita",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que hace la funcion MAX en LibreOffice Calc, como en =MAX(D2:D9)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Multiplica todos los valores del rango D2 a D9",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Muestra el valor mas alto registrado dentro del rango indicado",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Cuenta cuantas filas hay entre D2 y D9",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que sucede con las filas que no cumplen el criterio cuando aplicamos un Filtro automatico en LibreOffice Calc?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Se eliminan definitivamente del archivo",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "No se borran, el filtro solo las oculta temporalmente mientras esta activo",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Se mueven automaticamente a otra hoja nueva",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que precaucion debemos tener al ordenar una tabla en LibreOffice Calc (Datos > Ordenar)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Seleccionar toda la tabla y activar que el intervalo contiene etiquetas de columna para que los valores no se separen de sus filas ni se mezclen los encabezados",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Seleccionar unicamente la columna que queremos ordenar dejando el resto sin seleccionar",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Borrar primero los encabezados antes de ordenar",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En la practica de la bomba de calor con IoT, como se calcula la diferencia de temperatura del agua?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Sumando la temperatura de impulsion y el consumo electrico",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Restando la temperatura de retorno a la temperatura de impulsion (Temperatura de impulsion - Temperatura de retorno)",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Dividiendo la temperatura de retorno entre dos",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En la practica de la bomba de calor, si la celda B2 es la temperatura de impulsion y C2 es la temperatura de retorno, que formula calcula la diferencia en F2?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "=B2-C2",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "=SUMA(B2:C2)",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "=C2*B2",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En una plataforma de monitorizacion IoT de una instalacion termica, que significa por si solo que aparezca un aviso automatico?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Confirma al 100% que el equipo se ha roto y hay que tirarlo",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Indica que una persona debe revisar la informacion, pero no diagnostica ni confirma por si solo una averia concreta",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Que el sistema se ha desconectado de la red electrica",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que ventaja principal ofrece conectar los sensores de una bomba de calor (OT) con la aplicacion de mantenimiento (IT)?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Consultar datos a distancia mediante supervision remota y planificar una intervencion cuando sea necesario sin desplazarse continuamente",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Aumentar el uso de hojas de papel para apuntar las temperaturas cada hora",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Sustituir por completo a los tecnicos de mantenimiento para que nadie revise las instalaciones",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "En LibreOffice Calc, que ocurre con un grafico vinculado a una tabla si cambian los datos de origen?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "El grafico vinculado puede actualizarse reflejando los nuevos datos",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "El grafico se borra automaticamente de la hoja",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "El grafico sustituye y elimina los datos numericos de la tabla",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        },
+        {
+            "type": "choice",
+            "question": "Que tipo de grafico se utiliza en la practica de la bomba de calor para representar la evolucion de la temperatura de impulsion a lo largo de las horas de la jornada?",
+            "showConfetti": false,
+            "image": "",
+            "answerOptions": [
+                {
+                    "text": "Un grafico circular o de sectores",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                },
+                {
+                    "text": "Un grafico de linea (solo lineas)",
+                    "image": "",
+                    "isCorrect": true,
+                    "rationale": "¡Correcto!"
+                },
+                {
+                    "text": "Un grafico de dispersion sin ejes",
+                    "image": "",
+                    "isCorrect": false,
+                    "rationale": "Incorrecto."
+                }
+            ]
+        }
+    ]
+};
+    const config = {
+    "shuffle": true
+};
+
+    let currentQuestionIndex = 0;
+    let userAnswers = []; 
+    let isReviewMode = false;
+
+    const quizUI = document.getElementById('quiz-ui');
+    const resultsUI = document.getElementById('results-ui');
+    const questionText = document.getElementById('question-text');
+    const optionsContainer = document.getElementById('options-container');
+    const dndContainer = document.getElementById('dnd-container');
+    const feedbackText = document.getElementById('feedback-text');
+    const nextBtn = document.getElementById('next-btn');
+    const prevBtn = document.getElementById('prev-btn');
+    const currentQSpan = document.getElementById('current-q');
+    const scoreValSpan = document.getElementById('score-val');
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+
+    function randomizeData() {
+        if(!config.shuffle) return;
+        shuffleArray(quizData.questions);
+        quizData.questions.forEach(question => {
+            if(question.type === 'choice' || !question.type) shuffleArray(question.answerOptions);
+            if(question.type === 'dnd') shuffleArray(question.dndZones);
+        });
+    }
+
+    function initQuiz() {
+        userAnswers = new Array(quizData.questions.length).fill(null);
+        document.getElementById('total-q').innerText = quizData.questions.length;
+        isReviewMode = false;
+        currentQuestionIndex = 0;
+        updateScoreUI();
+        quizUI.style.display = 'block';
+        resultsUI.style.display = 'none';
+        loadQuestion();
+    }
+
+    function restartQuizManual(isFinished = false) {
+        if(!isFinished && !confirm("¿Reiniciar el quiz en curso? Perderás el progreso actual.")) return;
+        randomizeData();
+        initQuiz();
+    }
+
+    function updateScoreUI() {
+        let currentScore = 0;
+        userAnswers.forEach((ans, qIndex) => {
+            if (ans !== null) {
+                const q = quizData.questions[qIndex];
+                if ((q.type === 'choice' || !q.type) && q.answerOptions && q.answerOptions[ans] && q.answerOptions[ans].isCorrect) {
+                    currentScore++;
+                } else if (q.type === 'dnd' && ans === true) {
+                    currentScore++;
+                }
+            }
+        });
+        scoreValSpan.innerText = currentScore;
+        return currentScore;
+    }
+
+    function loadQuestion() {
+        const currentQ = quizData.questions[currentQuestionIndex];
+        currentQSpan.innerText = currentQuestionIndex + 1;
+        prevBtn.disabled = (currentQuestionIndex === 0);
+        
+        if (currentQuestionIndex === quizData.questions.length - 1) {
+            nextBtn.innerText = isReviewMode ? 'Volver a Resultados' : 'Finalizar y Ver Nota';
+            if(isReviewMode) nextBtn.classList.add('back-to-results');
+            else nextBtn.classList.remove('back-to-results');
+        } else {
+            nextBtn.innerText = 'Siguiente';
+            nextBtn.classList.remove('back-to-results');
+        }
+
+        questionText.innerHTML = '';
+        if (currentQ.question) {
+            const qTextDiv = document.createElement('div');
+            qTextDiv.innerText = currentQ.question;
+            questionText.appendChild(qTextDiv);
+        }
+
+        feedbackText.className = 'feedback';
+        feedbackText.innerHTML = '';
+        feedbackText.style.display = 'none';
+
+        if (currentQ.type === 'choice' || !currentQ.type) {
+            dndContainer.style.display = 'none';
+            optionsContainer.style.display = 'flex';
+            renderChoiceQuestion(currentQ);
+        } else if (currentQ.type === 'dnd') {
+            optionsContainer.style.display = 'none';
+            dndContainer.style.display = 'block';
+            renderDndQuestion(currentQ);
+        }
+    }
+
+    function renderChoiceQuestion(currentQ) {
+        if (currentQ.image) {
+            const imgContainer = document.createElement('div');
+            imgContainer.className = 'question-img-container';
+            const img = document.createElement('img');
+            img.src = currentQ.image;
+            img.className = 'question-img';
+            imgContainer.appendChild(img);
+            questionText.appendChild(imgContainer);
+        }
+
+        optionsContainer.innerHTML = '';
+        currentQ.answerOptions.forEach((opt, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'option-content';
+            
+            if (opt.image) {
+                const optImg = document.createElement('img');
+                optImg.src = opt.image;
+                optImg.className = 'option-img';
+                contentDiv.appendChild(optImg);
+            }
+            if (opt.text) {
+                const optSpan = document.createElement('span');
+                optSpan.className = 'option-text';
+                optSpan.innerText = opt.text;
+                contentDiv.appendChild(optSpan);
+            }
+            btn.appendChild(contentDiv);
+
+            const userIdx = userAnswers[currentQuestionIndex];
+            
+            if (isReviewMode || userIdx !== null) {
+                btn.disabled = true;
+                if (userIdx !== null && index === userIdx) {
+                    if (opt.isCorrect) btn.classList.add('correct');
+                    else btn.classList.add('wrong');
+                } else if (opt.isCorrect && (userIdx === null || !currentQ.answerOptions[userIdx].isCorrect)) {
+                    btn.classList.add('should-have-been');
+                }
+            } else {
+                btn.onclick = () => checkChoiceAnswer(opt, index);
+            }
+            optionsContainer.appendChild(btn);
+        });
+
+        if (userAnswers[currentQuestionIndex] !== null) {
+            showFeedbackText(currentQ.answerOptions[userAnswers[currentQuestionIndex]], currentQ, false);
+        } else if (isReviewMode) {
+            const correctOpt = currentQ.answerOptions.find(o => o.isCorrect);
+            showMissedFeedback(correctOpt);
+        }
+    }
+
+    function checkChoiceAnswer(selectedOption, index) {
+        userAnswers[currentQuestionIndex] = index;
+        updateScoreUI();
+        const allBtns = optionsContainer.querySelectorAll('.option-btn');
+        const currentQ = quizData.questions[currentQuestionIndex];
+
+        allBtns.forEach((btn, i) => {
+            btn.disabled = true;
+            const opt = currentQ.answerOptions[i];
+            if (i === index) {
+                if (opt.isCorrect) btn.classList.add('correct');
+                else btn.classList.add('wrong');
+            } else if (opt.isCorrect && !selectedOption.isCorrect) {
+                btn.classList.add('should-have-been');
+            }
+        });
+        showFeedbackText(selectedOption, currentQ, true);
+    }
+
+    function renderDndQuestion(currentQ) {
+        dndContainer.innerHTML = '';
+        
+        const board = document.createElement('div');
+        board.className = 'dnd-board';
+
+        const imgWrapper = document.createElement('div');
+        imgWrapper.className = 'dnd-img-wrapper';
+        
+        const img = document.createElement('img');
+        img.src = currentQ.image;
+        imgWrapper.appendChild(img);
+
+        const bank = document.createElement('div');
+        bank.className = 'dnd-bank';
+
+        const isCompleted = userAnswers[currentQuestionIndex] === true;
+        
+        currentQ.dndZones.forEach(zone => {
+            const zDiv = document.createElement('div');
+            zDiv.className = 'dnd-zone';
+            zDiv.style.left = zone.x + '%';
+            zDiv.style.top = zone.y + '%';
+            zDiv.dataset.id = zone.id;
+            zDiv.dataset.text = zone.text.trim().toLowerCase(); 
+            
+            if(isCompleted || isReviewMode) {
+                zDiv.classList.add('filled');
+                const pLabel = document.createElement('div');
+                pLabel.className = 'dnd-label placed';
+                pLabel.innerText = zone.text;
+                zDiv.appendChild(pLabel);
+            }
+            imgWrapper.appendChild(zDiv);
+        });
+
+        if(!isCompleted && !isReviewMode) {
+            let bankLabels = [...currentQ.dndZones];
+            if(config.shuffle) shuffleArray(bankLabels);
+
+            bankLabels.forEach(zone => {
+                const lDiv = document.createElement('div');
+                lDiv.className = 'dnd-label';
+                lDiv.innerText = zone.text;
+                lDiv.dataset.id = zone.id;
+                lDiv.dataset.text = zone.text.trim().toLowerCase(); 
+                
+                lDiv.addEventListener('touchstart', handleDragStart, {passive: false});
+                lDiv.addEventListener('mousedown', handleDragStart);
+                
+                bank.appendChild(lDiv);
+            });
+        }
+
+        board.appendChild(imgWrapper);
+        if(!isCompleted && !isReviewMode) board.appendChild(bank);
+        dndContainer.appendChild(board);
+
+        if (isCompleted) {
+            showFeedbackText({isCorrect: true, rationale: "¡Has colocado todas las piezas correctamente!"}, currentQ, false);
+        } else if (isReviewMode) {
+            showMissedFeedback({text: "Todas las piezas puestas en su lugar correspondiente."});
+        }
+    }
+
+    let dragClone = null;
+    let dragOriginal = null;
+    let shiftX = 0, shiftY = 0;
+
+    function handleDragStart(e) {
+        if(e.target.classList.contains('placed')) return;
+        dragOriginal = e.target;
+        const ev = e.type.includes('touch') ? e.touches[0] : e;
+        const rect = dragOriginal.getBoundingClientRect();
+        
+        shiftX = ev.clientX - rect.left;
+        shiftY = ev.clientY - rect.top;
+
+        dragClone = dragOriginal.cloneNode(true);
+        dragClone.style.position = 'fixed';
+        dragClone.style.zIndex = 9999;
+        dragClone.style.left = ev.clientX - shiftX + 'px';
+        dragClone.style.top = ev.clientY - shiftY + 'px';
+        dragClone.style.width = rect.width + 'px';
+        dragClone.style.margin = '0';
+        dragClone.style.pointerEvents = 'none';
+        document.body.appendChild(dragClone);
+
+        dragOriginal.style.opacity = '0.3';
+
+        document.addEventListener('touchmove', handleDragMove, {passive: false});
+        document.addEventListener('mousemove', handleDragMove, {passive: false});
+        document.addEventListener('touchend', handleDragEnd);
+        document.addEventListener('mouseup', handleDragEnd);
+
+        if(e.type === 'touchstart') e.preventDefault(); 
+    }
+
+    function handleDragMove(e) {
+        if(!dragClone) return;
+        e.preventDefault(); 
+        const ev = e.type.includes('touch') ? e.touches[0] : e;
+        dragClone.style.left = ev.clientX - shiftX + 'px';
+        dragClone.style.top = ev.clientY - shiftY + 'px';
+    }
+
+    function handleDragEnd(e) {
+        if(!dragClone) return;
+        const ev = e.type.includes('touch') ? e.changedTouches[0] : e;
+        
+        dragClone.remove();
+        dragClone = null;
+        dragOriginal.style.opacity = '1';
+
+        document.removeEventListener('touchmove', handleDragMove);
+        document.removeEventListener('mousemove', handleDragMove);
+        document.removeEventListener('touchend', handleDragEnd);
+        document.removeEventListener('mouseup', handleDragEnd);
+
+        const target = document.elementFromPoint(ev.clientX, ev.clientY);
+        const zone = target ? target.closest('.dnd-zone') : null;
+
+        if (zone && !zone.classList.contains('filled')) {
+            if (zone.dataset.text === dragOriginal.dataset.text) {
+                zone.appendChild(dragOriginal);
+                zone.classList.add('filled');
+                dragOriginal.classList.add('placed');
+                dragOriginal.removeEventListener('touchstart', handleDragStart);
+                dragOriginal.removeEventListener('mousedown', handleDragStart);
+                
+                checkDndCompletion();
+            } else {
+                feedbackText.style.display = 'block';
+                feedbackText.className = 'feedback show feedback-wrong';
+                feedbackText.innerHTML = `<strong>¡Te has equivocado!</strong><br>Ese no es el lugar de "${dragOriginal.innerText}". Vuelve a intentarlo.`;
+                setTimeout(() => { if(userAnswers[currentQuestionIndex] !== true) feedbackText.style.display = 'none'; }, 2500);
+            }
+        }
+        dragOriginal = null;
+    }
+
+    function checkDndCompletion() {
+        const totalZones = quizData.questions[currentQuestionIndex].dndZones.length;
+        const filledZones = dndContainer.querySelectorAll('.dnd-zone.filled').length;
+        if(filledZones === totalZones) {
+            userAnswers[currentQuestionIndex] = true;
+            updateScoreUI();
+            showFeedbackText({isCorrect: true, rationale: "¡Puzzle completado correctamente!"}, quizData.questions[currentQuestionIndex], true);
+        }
+    }
+
+    function showFeedbackText(selectedOpt, currentQ, isNewAnswer) {
+        feedbackText.style.display = 'block';
+        feedbackText.classList.add('show');
+        if (selectedOpt.isCorrect !== false) { 
+            feedbackText.classList.add('feedback-correct');
+            feedbackText.innerHTML = `<strong>¡Correcto!</strong><br>${selectedOpt.rationale || ""}`;
+            
+            if (currentQ.showConfetti && isNewAnswer) {
+                confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, zIndex: 9999 });
+            }
+        } else {
+            const correctOpt = currentQ.answerOptions.find(o => o.isCorrect);
+            const correctLabel = correctOpt.text ? correctOpt.text : '(La opción ilustrada correcta)';
+            feedbackText.classList.add('feedback-wrong');
+            feedbackText.innerHTML = `<strong>Incorrecto.</strong><br>${selectedOpt.rationale || ""}<br><br><strong>Respuesta correcta:</strong> ${correctLabel}`;
+        }
+    }
+
+    function showMissedFeedback(correctOpt) {
+        feedbackText.style.display = 'block';
+        feedbackText.classList.add('show', 'feedback-info');
+        feedbackText.innerHTML = `<strong>No contestada.</strong><br>La respuesta era: ${correctOpt.text ? correctOpt.text : '(Mira el código de colores)'}`;
+    }
+
+    function prevQuestion() {
+        if (currentQuestionIndex > 0) { currentQuestionIndex--; loadQuestion(); }
+    }
+
+    function nextQuestion() {
+        if (currentQuestionIndex < quizData.questions.length - 1) {
+            currentQuestionIndex++; loadQuestion();
+        } else {
+            if (isReviewMode) showResultsScreen(); 
+            else finishQuiz(); 
+        }
+    }
+
+    function finishQuiz() {
+        const finalScore = updateScoreUI();
+        const total = quizData.questions.length;
+        const percentage = (finalScore / total) * 100;
+        let msg = percentage === 100 ? '¡Perfecto!' : percentage >= 50 ? 'Has aprobado.' : 'Sigue practicando.';
+
+        const unanswered = userAnswers.filter(u => u === null).length;
+        if(unanswered > 0) msg += `<br><small>(Dejaste ${unanswered} preguntas sin contestar)</small>`;
+
+        document.getElementById('final-score-display').innerHTML = `Has acertado <strong>${finalScore}</strong> de <strong>${total}</strong>`;
+        document.getElementById('final-msg-display').innerHTML = msg;
+        showResultsScreen();
+    }
+
+    function showResultsScreen() {
+        quizUI.style.display = 'none';
+        resultsUI.style.display = 'block';
+    }
+
+    function enterReviewMode() {
+        isReviewMode = true;
+        currentQuestionIndex = 0;
+        resultsUI.style.display = 'none';
+        quizUI.style.display = 'block';
+        loadQuestion();
+    }
+
+    randomizeData();
+    initQuiz();
+</script>
+</body>
+</html>
