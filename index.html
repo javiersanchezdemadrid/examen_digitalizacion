@@ -16,7 +16,7 @@
         .question { font-size: 1.2rem; margin-bottom: 1.2rem; font-weight: 600; color: #2c3e50; line-height: 1.4; }
         .question-img-container { text-align: center; margin-top: 15px; margin-bottom: 15px; }
         .question-img { max-width: 100%; max-height: 350px; border-radius: 8px; object-fit: contain; }
-        
+
         /* Opciones Clásicas */
         .options { display: flex; flex-direction: column; gap: 10px; }
         .option-btn { padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; cursor: pointer; text-align: left; transition: all 0.2s; font-size: 1rem; position: relative; }
@@ -24,8 +24,8 @@
         .option-btn.correct { background-color: #d4edda; border-color: #28a745; color: #155724; }
         .option-btn.wrong { background-color: #f8d7da; border-color: #dc3545; color: #721c24; }
         .option-btn.should-have-been { border: 2px dashed #28a745; background-color: #e9f7ef; }
-        .option-btn:disabled { cursor: default; opacity: 1; } 
-        
+        .option-btn:disabled { cursor: default; opacity: 1; }
+
         .option-content { display: flex; align-items: center; gap: 15px; }
         .option-img { max-width: 150px; max-height: 150px; border-radius: 5px; object-fit: contain; }
         .option-text { flex-grow: 1; }
@@ -52,7 +52,7 @@
         #prev-btn { background-color: #e2e6ea; color: #333; }
         #prev-btn:hover:not(:disabled) { background-color: #dbe0e5; }
         #prev-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        #next-btn { background-color: #007bff; color: white; } 
+        #next-btn { background-color: #007bff; color: white; }
         #next-btn:hover { background-color: #0056b3; }
         #next-btn.back-to-results { background-color: #6c757d; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
@@ -65,24 +65,24 @@
         <div>
             <h1 id="quiz-title-display">Mi Quiz Interactivo</h1>
             <div class="score-board">
-                Pregunta <span id="current-q">1</span> de <span id="total-q">0</span> 
+                Pregunta <span id="current-q">1</span> de <span id="total-q">0</span>
                 | Puntos: <span id="score-val" style="font-weight: bold; color: #007bff;">0</span>
             </div>
         </div>
         <button class="shuffle-btn" onclick="restartQuizManual(false)">🔄 Reiniciar</button>
     </div>
-    
+
     <div id="question-area">
         <div class="question" id="question-text">Cargando...</div>
         <div class="options" id="options-container"></div>
         <div id="dnd-container" style="display:none;"></div>
-        
+
         <div class="feedback" id="feedback-text"></div>
     </div>
 
     <div class="controls">
         <button id="prev-btn" class="nav-btn" onclick="prevQuestion()">Anterior</button>
-        <div style="flex-grow: 1;"></div> 
+        <div style="flex-grow: 1;"></div>
         <button id="next-btn" class="nav-btn" onclick="nextQuestion()">Siguiente</button>
     </div>
 </div>
@@ -91,10 +91,11 @@
     <h1 style="font-size: 2rem; color: #007bff; margin-bottom: 20px;">Quiz Finalizado</h1>
     <div id="final-score-display" style="font-size: 1.5rem; margin: 20px 0;"></div>
     <p id="final-msg-display" style="color: #666; font-size: 1.1rem;"></p>
-    
-    <div style="margin-top: 30px; display: flex; gap: 10px; justify-content: center;">
+
+    <div style="margin-top: 30px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
         <button class="nav-btn" style="background-color: #28a745; color: white;" onclick="enterReviewMode()">🔍 Revisar</button>
-        <button class="nav-btn" style="background-color: #007bff; color: white;" onclick="restartQuizManual(true)">🔄 Jugar de Nuevo</button>
+        <button id="retry-failed-btn" class="nav-btn" style="background-color: #fd7e14; color: white; display: none;" onclick="startFailedRound()">🎯 Repetir solo falladas</button>
+        <button class="nav-btn" style="background-color: #007bff; color: white;" onclick="restartQuizManual(true, true)">🔄 Jugar de Nuevo</button>
     </div>
 </div>
 
@@ -2340,11 +2341,16 @@
     ]
 };
     const config = {
-    "shuffle": true
+    "shuffle": true,
+    "retryFailed": true
 };
 
+    const originalQuestions = quizData.questions.slice();
+    const baseTitle = document.getElementById('quiz-title-display').innerText;
+    let roundNumber = 1; // 1 = quiz completo; >1 = rondas de repaso de falladas
+
     let currentQuestionIndex = 0;
-    let userAnswers = []; 
+    let userAnswers = [];
     let isReviewMode = false;
 
     const quizUI = document.getElementById('quiz-ui');
@@ -2374,9 +2380,16 @@
         });
     }
 
+    function isAnswerCorrect(q, ans) {
+        if (ans === null || ans === undefined) return false;
+        if (q.type === 'dnd') return ans === true;
+        return !!(q.answerOptions && q.answerOptions[ans] && q.answerOptions[ans].isCorrect);
+    }
+
     function initQuiz() {
         userAnswers = new Array(quizData.questions.length).fill(null);
         document.getElementById('total-q').innerText = quizData.questions.length;
+        document.getElementById('quiz-title-display').innerText = roundNumber > 1 ? `${baseTitle} — Repaso ${roundNumber - 1}` : baseTitle;
         isReviewMode = false;
         currentQuestionIndex = 0;
         updateScoreUI();
@@ -2385,8 +2398,23 @@
         loadQuestion();
     }
 
-    function restartQuizManual(isFinished = false) {
+    // Nueva ronda con SOLO las preguntas falladas (o sin contestar) de la ronda actual
+    function startFailedRound() {
+        const failed = quizData.questions.filter((q, i) => !isAnswerCorrect(q, userAnswers[i]));
+        if (failed.length === 0) return;
+        quizData.questions = failed;
+        roundNumber++;
+        randomizeData();
+        initQuiz();
+    }
+
+    // fullReset=true restaura todas las preguntas originales
+    function restartQuizManual(isFinished = false, fullReset = false) {
         if(!isFinished && !confirm("¿Reiniciar el quiz en curso? Perderás el progreso actual.")) return;
+        if (fullReset) {
+            quizData.questions = originalQuestions.slice();
+            roundNumber = 1;
+        }
         randomizeData();
         initQuiz();
     }
@@ -2394,14 +2422,7 @@
     function updateScoreUI() {
         let currentScore = 0;
         userAnswers.forEach((ans, qIndex) => {
-            if (ans !== null) {
-                const q = quizData.questions[qIndex];
-                if ((q.type === 'choice' || !q.type) && q.answerOptions && q.answerOptions[ans] && q.answerOptions[ans].isCorrect) {
-                    currentScore++;
-                } else if (q.type === 'dnd' && ans === true) {
-                    currentScore++;
-                }
-            }
+            if (ans !== null && isAnswerCorrect(quizData.questions[qIndex], ans)) currentScore++;
         });
         scoreValSpan.innerText = currentScore;
         return currentScore;
@@ -2411,7 +2432,7 @@
         const currentQ = quizData.questions[currentQuestionIndex];
         currentQSpan.innerText = currentQuestionIndex + 1;
         prevBtn.disabled = (currentQuestionIndex === 0);
-        
+
         if (currentQuestionIndex === quizData.questions.length - 1) {
             nextBtn.innerText = isReviewMode ? 'Volver a Resultados' : 'Finalizar y Ver Nota';
             if(isReviewMode) nextBtn.classList.add('back-to-results');
@@ -2458,10 +2479,10 @@
         currentQ.answerOptions.forEach((opt, index) => {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
-            
+
             const contentDiv = document.createElement('div');
             contentDiv.className = 'option-content';
-            
+
             if (opt.image) {
                 const optImg = document.createElement('img');
                 optImg.src = opt.image;
@@ -2477,7 +2498,7 @@
             btn.appendChild(contentDiv);
 
             const userIdx = userAnswers[currentQuestionIndex];
-            
+
             if (isReviewMode || userIdx !== null) {
                 btn.disabled = true;
                 if (userIdx !== null && index === userIdx) {
@@ -2521,13 +2542,13 @@
 
     function renderDndQuestion(currentQ) {
         dndContainer.innerHTML = '';
-        
+
         const board = document.createElement('div');
         board.className = 'dnd-board';
 
         const imgWrapper = document.createElement('div');
         imgWrapper.className = 'dnd-img-wrapper';
-        
+
         const img = document.createElement('img');
         img.src = currentQ.image;
         imgWrapper.appendChild(img);
@@ -2536,15 +2557,15 @@
         bank.className = 'dnd-bank';
 
         const isCompleted = userAnswers[currentQuestionIndex] === true;
-        
+
         currentQ.dndZones.forEach(zone => {
             const zDiv = document.createElement('div');
             zDiv.className = 'dnd-zone';
             zDiv.style.left = zone.x + '%';
             zDiv.style.top = zone.y + '%';
             zDiv.dataset.id = zone.id;
-            zDiv.dataset.text = zone.text.trim().toLowerCase(); 
-            
+            zDiv.dataset.text = zone.text.trim().toLowerCase();
+
             if(isCompleted || isReviewMode) {
                 zDiv.classList.add('filled');
                 const pLabel = document.createElement('div');
@@ -2564,11 +2585,11 @@
                 lDiv.className = 'dnd-label';
                 lDiv.innerText = zone.text;
                 lDiv.dataset.id = zone.id;
-                lDiv.dataset.text = zone.text.trim().toLowerCase(); 
-                
+                lDiv.dataset.text = zone.text.trim().toLowerCase();
+
                 lDiv.addEventListener('touchstart', handleDragStart, {passive: false});
                 lDiv.addEventListener('mousedown', handleDragStart);
-                
+
                 bank.appendChild(lDiv);
             });
         }
@@ -2593,7 +2614,7 @@
         dragOriginal = e.target;
         const ev = e.type.includes('touch') ? e.touches[0] : e;
         const rect = dragOriginal.getBoundingClientRect();
-        
+
         shiftX = ev.clientX - rect.left;
         shiftY = ev.clientY - rect.top;
 
@@ -2614,12 +2635,12 @@
         document.addEventListener('touchend', handleDragEnd);
         document.addEventListener('mouseup', handleDragEnd);
 
-        if(e.type === 'touchstart') e.preventDefault(); 
+        if(e.type === 'touchstart') e.preventDefault();
     }
 
     function handleDragMove(e) {
         if(!dragClone) return;
-        e.preventDefault(); 
+        e.preventDefault();
         const ev = e.type.includes('touch') ? e.touches[0] : e;
         dragClone.style.left = ev.clientX - shiftX + 'px';
         dragClone.style.top = ev.clientY - shiftY + 'px';
@@ -2628,7 +2649,7 @@
     function handleDragEnd(e) {
         if(!dragClone) return;
         const ev = e.type.includes('touch') ? e.changedTouches[0] : e;
-        
+
         dragClone.remove();
         dragClone = null;
         dragOriginal.style.opacity = '1';
@@ -2648,7 +2669,7 @@
                 dragOriginal.classList.add('placed');
                 dragOriginal.removeEventListener('touchstart', handleDragStart);
                 dragOriginal.removeEventListener('mousedown', handleDragStart);
-                
+
                 checkDndCompletion();
             } else {
                 feedbackText.style.display = 'block';
@@ -2673,10 +2694,10 @@
     function showFeedbackText(selectedOpt, currentQ, isNewAnswer) {
         feedbackText.style.display = 'block';
         feedbackText.classList.add('show');
-        if (selectedOpt.isCorrect !== false) { 
+        if (selectedOpt.isCorrect !== false) {
             feedbackText.classList.add('feedback-correct');
             feedbackText.innerHTML = `<strong>¡Correcto!</strong><br>${selectedOpt.rationale || ""}`;
-            
+
             if (currentQ.showConfetti && isNewAnswer) {
                 confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, zIndex: 9999 });
             }
@@ -2702,8 +2723,8 @@
         if (currentQuestionIndex < quizData.questions.length - 1) {
             currentQuestionIndex++; loadQuestion();
         } else {
-            if (isReviewMode) showResultsScreen(); 
-            else finishQuiz(); 
+            if (isReviewMode) showResultsScreen();
+            else finishQuiz();
         }
     }
 
@@ -2715,6 +2736,19 @@
 
         const unanswered = userAnswers.filter(u => u === null).length;
         if(unanswered > 0) msg += `<br><small>(Dejaste ${unanswered} preguntas sin contestar)</small>`;
+
+        // Botón de repaso: tras el quiz completo siempre; tras rondas de falladas solo si la opción está activa
+        const failedCount = total - finalScore;
+        const retryBtn = document.getElementById('retry-failed-btn');
+        const canRetry = failedCount > 0 && (roundNumber === 1 || config.retryFailed);
+        retryBtn.style.display = canRetry ? 'inline-block' : 'none';
+        retryBtn.innerText = `🎯 Repetir solo falladas (${failedCount})`;
+
+        if (roundNumber > 1) {
+            msg = failedCount === 0
+                ? `🏆 ¡Has acertado todas las que fallabas! (repaso ${roundNumber - 1})`
+                : `Repaso ${roundNumber - 1}: te quedan ${failedCount} por dominar.`;
+        }
 
         document.getElementById('final-score-display').innerHTML = `Has acertado <strong>${finalScore}</strong> de <strong>${total}</strong>`;
         document.getElementById('final-msg-display').innerHTML = msg;
